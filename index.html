@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta content="width=device-width, initial-scale=1" name="viewport"/>
-    <title>Title</title>
+    <title>不服，弹一弹</title>
     <style>
         * {
             margin: 0;
@@ -212,7 +212,7 @@
         this.x;
         this.y;
         this.angle;
-        this.bounceLoss = 2;
+        this.bounceLoss = 0;
 
         //是否在球池中
         this.inBallPool;
@@ -286,8 +286,9 @@
             //0度为垂直向下，90度为水平向右，-90度为水平向左
             // yv/v = cos(angle)
             // xy/v = -sin(angle);
-            this.xv = -Math.sin(angleToRad(this.angle)) * this.v;
-            this.yv = Math.cos(angleToRad(this.angle)) * this.v;
+            let rad = angleToRad(this.angle);
+            this.xv = -Math.sin(rad) * this.v;
+            this.yv = Math.cos(rad) * this.v + 5;
             // console.log("xv="+this.xv+" yv="+this.yv)
             this.shape.x += this.xv;
             this.shape.y += this.yv;
@@ -345,7 +346,7 @@
         this.shot = function (mx, my) {
             this.point(mx, my);
             const ball = ballPool.get();
-            return ball.set(this.x, this.y, this.angle, 20).draw();
+            return ball.set(this.x, this.y, this.angle, 18).draw();
         };
     }
 
