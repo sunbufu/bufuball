@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta content="width=device-width, initial-scale=1" name="viewport"/>
+    <title>Title</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+            width: 100%;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+    <script src="js/easeljs.min.js"></script>
+    <script src="js/resize.js"></script>
+    <script src="js/barrier_util.js"></script>
+    <!--<script src="js/tweenjs.min.js"></script>-->
+</head>
+<body style="height:100%; width:100%; margin:0; padding:0;">
+
+<canvas id="stageCanvas" width=600 height=900
+        style=" height: 100%;width: 100%;margin: 0;padding: 0; background: black;">
+    您的浏览器不支持HTML5 canvas，请换一个浏览器。
+</canvas>
+
+<script type="text/javascript">
+
+
+    //障碍物的宽高
+    const BARRIER_HEIGHT = 30;
+    const BARRIER_WIDTH = 30;
+    //单次生成的障碍物的数量最大值
+    const MAX_ROUND_BARRIER_COUNT = 5;
+
+
+    let stage;
+    //球数量
+    let ballCount = 1;
+    //得分
+    let score = 0;
+    //回合数
+    let round = 1;
+    //回合状态0回合结束，1回合进行中
+    let roundStatus = 0;
+    //游戏状态：0：游戏结束，1：游戏进行中
+    let gameStatus = 1;
+
+    //有效的球
+    let balls;
+    //有效的障碍
+    let barriers;
+    //球池
+    let ballPool;
+    //初始化枪
+    let gun;
+    //初始化记分牌
+    let scoreText;
+
+    (function main() {
+        initStage();
+
+        //有效的球
+        balls = new Set();
+        //有效的障碍
+        barriers = new Set();
+        //球池
+        ballPool = new BallPool();
+        //初始化枪
+        gun = new Gun(stage.canvas.width / 2, 0, 6, 80);
+        gun.draw();
+        //初始化记分牌
+        scoreText = new ScoreText(0, 0);
+        scoreText.draw();
+        //初始化障碍
+        stopRound(barriers);
+
+        //添加事件
+        stage.addEventListener("stagemousemove", function (event) {
+            gun.point(event.rawX, event.rawY);
+        });
+        stage.addEventListener("stagemouseup", function (event) {
+            if (roundStatus === 0) {
+                roundStatus = 1;
+                shot(gun, balls, event.rawX, event.rawY);
+            }
+        });
+        createjs.Ticker.addEventListener("tick", function () {
+            if (gameStatus === 1) {
+                balls.forEach(function (ball) {
+                    if (!ball.move(scoreText, barriers)) {
+                        deleteBall(balls, ball)
+                    }
+                });
+            }
+        });
+    })();
+
+    /**
+     * 障碍
+     */
+    function Barrier(x, value, type) {
+        this.x = x;
+        //0:red 1:green 2:blue
+        this.colorType;
+        //从255依次递减
+        this.colorValue;
+        this.shape;
+        this.container;
+        this.label;
+        //0:三角 1：圆 2：方块
+        this.shapeType;
+        //0:普通 1：加一
+        this.type = type;
+
+        this.value = value;
+        this.maxValue = value;
+
+        this.getColorStr = function () {
+            let result = "rgb(";
+            switch (this.colorType) {
+                case 0:
+                    result = result + this.colorValue + ",0,0";
+                    break;
+                case 1:
+                    result = result + "0," + this.colorValue + ",0";
+                    break;
+                case 2:
+                    result = result + "0,0," + this.colorValue;
+                    break;
+            }
+            return result + ")";
+        };
+
+        this.draw = function () {
+            this.container = new createjs.Container();
+
+            this.shape = new createjs.Shape();
+            this.shapeType = Math.round(Math.random() * 2);
+            this.colorType = Math.round(Math.random() * 2);
+            this.colorValue = 255;
+            this.drawShape();
+            this.shape.x = this.x;
+            this.shape.y = stage.canvas.height - BARRIER_HEIGHT;
+
+            this.label = new createjs.Text("10", "10px Arial", "#FFFFFF");
+            this.drawLabel();
+            this.label.textAlign = "center";
+            this.label.textBaseline = "middle";
+            this.label.x = this.x + BARRIER_WIDTH / 2;
+            this.label.y = this.shape.y + BARRIER_HEIGHT / 2;
+
+            this.container.addChild(this.shape, this.label);
+            stage.addChild(this.container);
+        };
+
+        this.drawShape = function () {
+            if (this.shapeType === 0) {
+                this.shape.graphics.beginFill(this.getColorStr()).drawCircle(BARRIER_WIDTH / 2, BARRIER_HEIGHT / 2, BARRIER_HEIGHT / 2);
+            } else if (this.shapeType === 1) {
+                this.shape.graphics.beginFill(this.getColorStr()).drawCircle(BARRIER_WIDTH / 2, BARRIER_HEIGHT / 2, BARRIER_HEIGHT / 2);
+            } else if (this.shapeType === 2) {
+                this.shape.graphics.beginFill(this.getColorStr()).drawRect(0, 0, BARRIER_HEIGHT, BARRIER_HEIGHT);
+            }
+        };
+
+        this.drawLabel = function () {
+            if (this.type === 0) {
+                this.label.text = this.value;
+            } else {
+                this.label.text = "+";
+            }
+        };
+
+        this.move = function () {
+            this.shape.y -= BARRIER_HEIGHT;
+            this.label.y -= BARRIER_HEIGHT;
+            if (this.shape.y < BARRIER_HEIGHT) {
+                gameStatus = 0;
+                alert("游戏结束");
+            }
+        };
+
+        this.crash = function () {
+            this.value--;
+            this.drawLabel();
+            if (this.value <= 0) {
+                stage.removeChild(this.container);
+                barriers.delete(this);
+                //加一个球
+                if (this.type === 1) {
+                    ++ballCount;
+                }
+            }
+            this.colorValue -= 255 / this.maxValue;
+            this.shape.graphics.clear();
+            this.drawShape();
+        };
+    }
+
+    /**
+     *  球
+     */
+    function Ball() {
+        this.x;
+        this.y;
+        this.angle;
+        this.bounceLoss = 2;
+
+        //是否在球池中
+        this.inBallPool;
+
+        //移动速度
+        this.v = 20;
+        this.xv;
+        this.yv;
+
+        this.draw = function () {
+            if (this.shape == null) {
+                this.shape = new createjs.Shape();
+                this.shape.graphics.beginFill("red").drawCircle(0, 0, 10);
+                stage.addChild(this.shape);
+            } else {
+                this.shape.visible = true;
+            }
+            this.shape.x = this.x;
+            this.shape.y = this.y;
+            return this;
+        };
+
+        this.set = function (x, y, angle, v) {
+            this.inBallPool = false;
+            this.x = x;
+            this.y = y;
+            this.angle = angle;
+            this.v = v;
+            return this;
+        };
+
+        this.move = function () {
+            //回收
+            if (this.v <= 5) {
+                if (!this.inBallPool) {
+                    this.inBallPool = true;
+                    this.shape.visible = false;
+                    ballPool.put(this);
+                }
+                return false;
+            }
+            //超出边界（左右边界）纵向的反弹
+            if (this.shape.x > stage.canvas.width || this.shape.x < 0) {
+                this.angle = bounce(this.angle, 0);
+                this.v -= this.bounceLoss;
+            }
+            //超出上边界反弹
+            if (this.shape.y < 0) {
+                this.angle = bounce(this.angle, 90);
+                this.v -= this.bounceLoss;
+            }
+            //超出下边界，回收
+            if (this.shape.y > stage.canvas.height) {
+                this.v = 0;
+            }
+
+            for (const barrier of barriers) {
+                const pt = this.shape.localToLocal(0, 0, barrier.container);
+                if (barrier.container.hitTest(pt.x, pt.y)) {
+                    this.v -= this.bounceLoss;
+                    const sectionAngle = getSectionAngle(this.shape.x, this.shape.y, barrier.container.x, barrier.container.y);
+                    this.angle = bounce(this.angle, sectionAngle);
+                    barrier.crash(barriers);
+                    score++;
+                    scoreText.setLabel();
+                }
+            }
+
+            //建立坐标系，以枪的垂直向下为y轴的负方向
+            //以水平向右为x轴的正方向
+            //0度为垂直向下，90度为水平向右，-90度为水平向左
+            // yv/v = cos(angle)
+            // xy/v = -sin(angle);
+            this.xv = -Math.sin(angleToRad(this.angle)) * this.v;
+            this.yv = Math.cos(angleToRad(this.angle)) * this.v;
+            // console.log("xv="+this.xv+" yv="+this.yv)
+            this.shape.x += this.xv;
+            this.shape.y += this.yv;
+            return true;
+        }
+    }
+
+    /**
+     *球池
+     */
+    function BallPool() {
+        this.pool = [];
+
+        this.put = function (ball) {
+            this.pool.push(ball);
+        };
+
+        this.get = function () {
+            let ball;
+            if (this.pool.length > 0) {
+                ball = this.pool.shift();
+            } else {
+                ball = new Ball();
+            }
+            return ball;
+        };
+    }
+
+    /**
+     * 枪
+     * @constructor
+     */
+    function Gun(x, y, w, h) {
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
+
+        this.draw = function () {
+            this.shape = new createjs.Shape();
+            this.shape.graphics.beginFill("red").drawRect(0, 0, this.w, this.h);
+            // 设置起点位置，相对于父对象
+            this.shape.x = stage.canvas.width / 2 - this.w / 2;
+            this.shape.y = this.y - this.w;
+            stage.addChild(this.shape);
+        };
+
+        this.point = function (mx, my) {
+            const x = mx - this.x;
+            const y = my;
+            this.angle = -180 * Math.atan(x / y) / Math.PI;
+            this.shape.rotation = this.angle;
+        };
+
+        this.shot = function (mx, my) {
+            this.point(mx, my);
+            const ball = ballPool.get();
+            return ball.set(this.x, this.y, this.angle, 20).draw();
+        };
+    }
+
+    /**
+     * 计分板
+     * @param x
+     * @param y
+     * @constructor
+     */
+    function ScoreText(x, y) {
+        this.draw = function () {
+            this.label = new createjs.Text("分数:0\n球数:1", "18px Arial", "#ff7700");
+            this.label.x = x;
+            this.label.y = y;
+            stage.addChild(this.label);
+        };
+
+        this.setLabel = function () {
+            this.label.text = "分数:" + score + "\n球数:" + ballCount;
+        };
+
+    }
+
+    /**
+     * 初始化场景
+     */
+    function initStage() {
+        resize("stageCanvas");
+        stage = new createjs.Stage("stageCanvas");
+        createjs.Touch.enable(stage);
+        //自动更新舞台
+        createjs.Ticker.on('tick', stage);
+    }
+
+    /**
+     * 结束回合
+     */
+    function stopRound() {
+        roundStatus = 0;
+        round++;
+
+        barriers.forEach(function (barrier) {
+            barrier.move();
+        });
+
+        barrierXs = genrateBarrierX(stage.canvas.width, BARRIER_WIDTH, Math.ceil(Math.random() * MAX_ROUND_BARRIER_COUNT));
+        for (i = 0, len = barrierXs.length; i < len; i++) {
+            const type = Math.round(Math.random());
+            let barrier;
+            if (type === 0) {
+                barrier = new Barrier(barrierXs[i], Math.round(Math.random() * score) + 1, type);
+            } else {
+                barrier = new Barrier(barrierXs[i], 1, type);
+            }
+            barrier.draw();
+            barriers.add(barrier);
+        }
+    }
+
+    /**
+     * 向指定方法发射ballCount个球，间隔0.1s
+     * @param gun
+     * @param balls
+     * @param x
+     * @param y
+     */
+    function shot(gun, balls, x, y) {
+        for (i = 0; i < ballCount; i++) {
+            setTimeout(function () {
+                const ball = gun.shot(x, y);
+                balls.add(ball);
+            }, i * 300);
+        }
+    }
+
+    /**
+     * 移除有效的球
+     */
+    function deleteBall(balls, ball) {
+        balls.delete(ball);
+        if (balls.size <= 0 && roundStatus === 1) {
+            stopRound(barriers);
+        }
+    }
+
+    /**
+     * 角度转弧度
+     * @param angle
+     * @returns {number}
+     */
+    function angleToRad(angle) {
+        return angle * Math.PI / 180;
+    }
+
+    /**
+     * 弧度转角度
+     * @param rad
+     * @returns {number}
+     */
+    function radToAngle(rad) {
+        return rad * 180 / Math.PI;
+    }
+
+    /**
+     * 计算反弹角度
+     * @param moveAngle     运动角度
+     * @param sectionAngle  反弹面角度
+     * @returns {*}
+     */
+    function bounce(moveAngle, sectionAngle) {
+        //计算垂直于反弹面的角度
+        verticalSectionAngle = toRightAngle(sectionAngle + 90);
+        return toRightAngle(verticalSectionAngle - moveAngle + verticalSectionAngle + 180);
+    }
+
+    /**
+     * 获取反弹面角度
+     * @param ballX
+     * @param ballY
+     * @param barrierX
+     * @param barrierY
+     */
+    function getSectionAngle(ballX, ballY, barrierX, barrierY) {
+        return toRightAngle(radToAngle(Math.atan2(barrierX - ballX, barrierY - ballY)) + 90);
+    }
+
+    /**
+     * 转换成正确的角度
+     * +180~-180
+     * @param angle
+     * @returns {*}
+     */
+    function toRightAngle(angle) {
+        if (angle <= 180 && angle > -180) {
+            return angle;
+        } else if (angle > 180) {
+            return toRightAngle(angle - 360);
+        } else if (angle <= -180) {
+            return toRightAngle(angle + 360);
+        }
+    }
+
+</script>
+</body>
+</html>
