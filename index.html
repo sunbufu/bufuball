@@ -35,8 +35,8 @@
 
 
     //障碍物的宽高
-    const BARRIER_HEIGHT = 30;
-    const BARRIER_WIDTH = 30;
+    const BARRIER_HEIGHT = 50;
+    const BARRIER_WIDTH = 50;
     //单次生成的障碍物的数量最大值
     const MAX_ROUND_BARRIER_COUNT = 5;
 
@@ -150,7 +150,7 @@
             this.shape.x = this.x;
             this.shape.y = stage.canvas.height - BARRIER_HEIGHT;
 
-            this.label = new createjs.Text("10", "10px Arial", "#FFFFFF");
+            this.label = new createjs.Text("", "15px Arial", "#FFFFFF");
             this.drawLabel();
             this.label.textAlign = "center";
             this.label.textBaseline = "middle";
