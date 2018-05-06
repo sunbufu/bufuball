@@ -39,6 +39,9 @@
     const BARRIER_WIDTH = 50;
     //单次生成的障碍物的数量最大值
     const MAX_ROUND_BARRIER_COUNT = 5;
+    //重力加速度
+    const GRAVITY = 80;
+
 
 
     let stage;
@@ -92,10 +95,10 @@
                 shot(gun, balls, event.rawX, event.rawY);
             }
         });
-        createjs.Ticker.addEventListener("tick", function () {
+        createjs.Ticker.addEventListener("tick", function (event) {
             if (gameStatus === 1) {
                 balls.forEach(function (ball) {
-                    if (!ball.move(scoreText, barriers)) {
+                    if (!ball.move(event.delta / 1000)) {
                         deleteBall(balls, ball)
                     }
                 });
@@ -150,7 +153,7 @@
             this.shape.x = this.x;
             this.shape.y = stage.canvas.height - BARRIER_HEIGHT;
 
-            this.label = new createjs.Text("", "15px Arial", "#FFFFFF");
+            this.label = new createjs.Text("", "20px Arial", "#FFFFFF");
             this.drawLabel();
             this.label.textAlign = "center";
             this.label.textBaseline = "middle";
@@ -217,8 +220,8 @@
         //是否在球池中
         this.inBallPool;
 
-        //移动速度
-        this.v = 20;
+        //移动速度 px/s
+        this.v;
         this.xv;
         this.yv;
 
@@ -244,7 +247,7 @@
             return this;
         };
 
-        this.move = function () {
+        this.move = function (time) {
             //回收
             if (this.v <= 5) {
                 if (!this.inBallPool) {
@@ -269,6 +272,7 @@
                 this.v = 0;
             }
 
+            //TODO:优化碰撞算法，现在是用球的中心点碰撞障碍，考虑根据方向计算离障碍最近的点，计算碰撞
             for (const barrier of barriers) {
                 const pt = this.shape.localToLocal(0, 0, barrier.container);
                 if (barrier.container.hitTest(pt.x, pt.y)) {
@@ -281,17 +285,22 @@
                 }
             }
 
+            //TODO:此处考虑计算加速度，重新设计反弹算法
+            let rad = angleToRad(this.angle);
+            this.xv = -Math.sin(rad) * this.v;
+            this.yv = Math.cos(rad) * this.v + GRAVITY;
+
             //建立坐标系，以枪的垂直向下为y轴的负方向
             //以水平向右为x轴的正方向
             //0度为垂直向下，90度为水平向右，-90度为水平向左
             // yv/v = cos(angle)
             // xy/v = -sin(angle);
-            let rad = angleToRad(this.angle);
-            this.xv = -Math.sin(rad) * this.v;
-            this.yv = Math.cos(rad) * this.v + 5;
+            // let rad = angleToRad(this.angle);
+            // this.xv = -Math.sin(rad) * this.v;
+            // this.yv = Math.cos(rad) * this.v + 5;
             // console.log("xv="+this.xv+" yv="+this.yv)
-            this.shape.x += this.xv;
-            this.shape.y += this.yv;
+            this.shape.x += this.xv * time;
+            this.shape.y += this.yv * time;
             return true;
         }
     }
@@ -346,7 +355,7 @@
         this.shot = function (mx, my) {
             this.point(mx, my);
             const ball = ballPool.get();
-            return ball.set(this.x, this.y, this.angle, 18).draw();
+            return ball.set(this.x, this.y, this.angle, 500).draw();
         };
     }
 
@@ -358,7 +367,7 @@
      */
     function ScoreText(x, y) {
         this.draw = function () {
-            this.label = new createjs.Text("分数:0\n球数:1", "18px Arial", "#ff7700");
+            this.label = new createjs.Text("分数:0\n球数:1", "25px Arial", "#ff7700");
             this.label.x = x;
             this.label.y = y;
             stage.addChild(this.label);
