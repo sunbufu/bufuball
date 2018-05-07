@@ -43,7 +43,6 @@
     const GRAVITY = 80;
 
 
-
     let stage;
     //球数量
     let ballCount = 1;
@@ -202,7 +201,7 @@
                     ++ballCount;
                 }
             }
-            this.colorValue -= 255 / this.maxValue;
+            this.colorValue = Math.floor(this.colorValue - 255 / this.maxValue);
             this.shape.graphics.clear();
             this.drawShape();
         };
